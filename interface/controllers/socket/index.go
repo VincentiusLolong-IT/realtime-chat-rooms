@@ -8,7 +8,12 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func ServerWS(hub core.Hubs, upgrader websocket.Upgrader, w http.ResponseWriter, r *http.Request) {
+func ServerWS(
+	hub core.Hubs,
+	upgrader websocket.Upgrader,
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	roomName := r.URL.Query().Get("room")
 	if roomName == "" {
 		roomName = "general"
@@ -25,8 +30,18 @@ func ServerWS(hub core.Hubs, upgrader websocket.Upgrader, w http.ResponseWriter,
 	}
 
 	room := hub.GetRoom(roomName)
-	room.Clients[client] = true
 
-	go core.WritePump(client)
-	hub.ReadPump(roomName, client)
+	room.Mu.Lock()
+	room.Clients[client] = true
+	room.Mu.Unlock()
+
+	defer func() {
+		room.Mu.Lock()
+		delete(room.Clients, client)
+		room.Mu.Unlock()
+		close(client.Send)
+	}()
+
+	go hub.WritePump(client)
+	hub.ReadPump(client)
 }

@@ -25,6 +25,7 @@
       padding: 10px;
       overflow-y: auto;
       border-bottom: 1px solid #ddd;
+      font-size: 14px;
     }
     .messages div {
       margin-bottom: 6px;
@@ -45,48 +46,104 @@
       color: white;
       cursor: pointer;
     }
+    .room {
+      display: flex;
+      border-bottom: 1px solid #ddd;
+    }
+    .room input {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      outline: none;
+    }
+    .room button {
+      padding: 10px 16px;
+      border: none;
+      background: #059669;
+      color: white;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
 
 <div class="chat">
+  <div class="room">
+    <input id="roomInput" placeholder="Enter room name..." />
+    <button onclick="joinRoom()">Join</button>
+  </div>
+
   <div class="messages" id="messages"></div>
+
   <div class="input">
-    <input id="messageInput" placeholder="Type a message..." />
-    <button onclick="sendMessage()">Send</button>
+    <input id="messageInput" placeholder="Type a message..." disabled />
+    <button onclick="sendMessage()" disabled id="sendBtn">Send</button>
   </div>
 </div>
 
 <script>
-  const room = "general"; // change room name if needed
-  const ws = new WebSocket(`ws://localhost:8080/ws?room=${room}`);
+  let ws = null;
+  let currentRoom = "";
 
   const messagesEl = document.getElementById("messages");
-  const inputEl = document.getElementById("messageInput");
+  const messageInput = document.getElementById("messageInput");
+  const sendBtn = document.getElementById("sendBtn");
+  const roomInput = document.getElementById("roomInput");
 
-  ws.onopen = () => {
-    addMessage("🟢 Connected to room: " + room);
-  };
+  function joinRoom() {
+    const room = roomInput.value.trim();
+    if (!room) {
+      alert("Room name is required");
+      return;
+    }
 
-  ws.onmessage = (event) => {
-    addMessage(event.data);
-  };
+    currentRoom = room;
+    ws = new WebSocket(`ws://localhost:8080/ws?room=${room}`);
 
-  ws.onclose = () => {
-    addMessage("🔴 Disconnected");
-  };
+    ws.onopen = () => {
+      addMessage(`🟢 Joined room: ${room}`);
+      messageInput.disabled = false;
+      sendBtn.disabled = false;
+      roomInput.disabled = true;
+    };
 
-  ws.onerror = (err) => {
-    console.error("WebSocket error", err);
-  };
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        addMessage(`[${data.room}] ${data.message}`);
+      } catch {
+        addMessage(event.data);
+      }
+    };
+
+    ws.onclose = () => {
+      addMessage("🔴 Disconnected");
+      messageInput.disabled = true;
+      sendBtn.disabled = true;
+    };
+
+    ws.onerror = (err) => {
+      console.error("WebSocket error", err);
+    };
+  }
 
   function sendMessage() {
-    const text = inputEl.value.trim();
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+    const text = messageInput.value.trim();
     if (!text) return;
 
-    ws.send(text);
-    inputEl.value = "";
+    ws.send(JSON.stringify({
+      room: currentRoom,
+      message: text
+    }));
+
+    messageInput.value = "";
   }
+
+  messageInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") sendMessage();
+  });
 
   function addMessage(text) {
     const div = document.createElement("div");
@@ -94,13 +151,6 @@
     messagesEl.appendChild(div);
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
-
-  // send on Enter
-  inputEl.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      sendMessage();
-    }
-  });
 </script>
 
 </body>

@@ -1,6 +1,8 @@
 package core
 
 import (
+	"encoding/json"
+	"log"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -13,6 +15,7 @@ type Hub struct {
 
 type Room struct {
 	Clients map[*Client]bool
+	Mu      sync.RWMutex
 }
 
 type Client struct {
@@ -20,10 +23,16 @@ type Client struct {
 	Send chan []byte
 }
 
+type Response struct {
+	Room    string `json:"room"`
+	Message string `json:"message"`
+}
+
 type Hubs interface {
 	GetRoom(name string) *Room
-	Broadcast(roomName string, msg []byte)
-	ReadPump(roomName string, client *Client)
+	Broadcast(msg []byte)
+	ReadPump(client *Client)
+	WritePump(client *Client)
 }
 
 func NewHubs() Hubs {
@@ -36,10 +45,6 @@ func (h *Hub) GetRoom(name string) *Room {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if h.Rooms == nil {
-		h.Rooms = make(map[string]*Room)
-	}
-
 	room, ok := h.Rooms[name]
 	if !ok {
 		room = &Room{
@@ -51,14 +56,22 @@ func (h *Hub) GetRoom(name string) *Room {
 	return room
 }
 
-func (h *Hub) Broadcast(roomName string, msg []byte) {
-	h.mu.Lock()
-	room, ok := h.Rooms[roomName]
-	h.mu.Unlock()
+func (h *Hub) Broadcast(msg []byte) {
+	var data Response
+	if err := json.Unmarshal(msg, &data); err != nil {
+		log.Println("invalid json:", err)
+		return
+	}
 
+	h.mu.RLock()
+	room, ok := h.Rooms[data.Room]
+	h.mu.RUnlock()
 	if !ok {
 		return
 	}
+
+	room.Mu.RLock()
+	defer room.Mu.RUnlock()
 
 	for client := range room.Clients {
 		select {
@@ -70,18 +83,7 @@ func (h *Hub) Broadcast(roomName string, msg []byte) {
 	}
 }
 
-func WritePump(client *Client) {
-	defer client.Conn.Close()
-
-	for msg := range client.Send {
-		err := client.Conn.WriteMessage(websocket.TextMessage, msg)
-		if err != nil {
-			break
-		}
-	}
-}
-
-func (h *Hub) ReadPump(roomName string, client *Client) {
+func (h *Hub) ReadPump(client *Client) {
 	defer client.Conn.Close()
 
 	for {
@@ -89,6 +91,16 @@ func (h *Hub) ReadPump(roomName string, client *Client) {
 		if err != nil {
 			break
 		}
-		h.Broadcast(roomName, msg)
+		h.Broadcast(msg)
+	}
+}
+
+func (h *Hub) WritePump(client *Client) {
+	defer client.Conn.Close()
+
+	for msg := range client.Send {
+		if err := client.Conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+			break
+		}
 	}
 }
