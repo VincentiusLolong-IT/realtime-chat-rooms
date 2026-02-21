@@ -1,0 +1,11 @@
+version: "2"
+sql:
+  - engine: "mysql"
+    queries: "infrastructure/query/"
+    schema: "infrastructure/migrations/"
+    gen:
+      go:
+        package: "models"
+        out: "domain/models"
+        emit_json_tags: true
+        emit_db_tags: true

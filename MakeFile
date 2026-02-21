@@ -1,0 +1,17 @@
+DB_DSN = root:password@tcp(localhost:3306)/roomchat
+MIGRATION_DIR = infrastructure/migrations
+
+migrate-up:
+	goose -dir $(MIGRATION_DIR) mysql "$(DB_DSN)" up
+
+migrate-down:
+	goose -dir $(MIGRATION_DIR) mysql "$(DB_DSN)" down
+
+migrate-status:
+	goose -dir $(MIGRATION_DIR) mysql "$(DB_DSN)" status
+
+migrate-reset:
+	goose -dir $(MIGRATION_DIR) mysql "$(DB_DSN)" reset
+
+generate:
+	sqlc generate

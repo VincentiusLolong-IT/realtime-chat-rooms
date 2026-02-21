@@ -4,8 +4,8 @@ import (
 	"log"
 	"net/http"
 	"socket-chatroom/core"
-	"socket-chatroom/infrastructure/routers"
 	"socket-chatroom/interface/controllers"
+	"socket-chatroom/interface/routers"
 
 	"github.com/gorilla/websocket"
 )
